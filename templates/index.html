@@ -1,0 +1,907 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Newspaper Delivery Tracker</title>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      crossorigin=""
+    />
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        font-family: Arial, sans-serif;
+      }
+
+      .controls {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        z-index: 1000;
+        background: white;
+        padding: 15px;
+        border-radius: 8px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        min-width: 320px;
+      }
+
+      .controls h3 {
+        margin-bottom: 10px;
+        color: #333;
+        font-size: 18px;
+      }
+
+      .controls input {
+        padding: 8px;
+        margin-right: 8px;
+        width: 180px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+      }
+
+      .controls button {
+        padding: 8px 15px;
+        margin-right: 8px;
+        cursor: pointer;
+        border: none;
+        border-radius: 4px;
+        font-weight: bold;
+      }
+
+      #loadBtn {
+        background-color: #2196f3;
+        color: white;
+      }
+
+      #loadBtn:hover {
+        background-color: #1976d2;
+      }
+
+      .status-indicator {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        margin-right: 8px;
+      }
+
+      .status-connected {
+        background-color: #4caf50;
+      }
+
+      .status-disconnected {
+        background-color: #f44336;
+      }
+
+      .status-reconnecting {
+        background-color: #ff9800;
+        animation: pulse 1s infinite;
+      }
+
+      @keyframes pulse {
+        0% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.5;
+        }
+        100% {
+          opacity: 1;
+        }
+      }
+
+      #connectionStatus {
+        font-size: 13px;
+        color: #666;
+        margin-top: 8px;
+      }
+
+      #map {
+        height: 100vh;
+        width: 100vw;
+      }
+
+      .house-popup {
+        min-width: 250px;
+        font-family: Arial, sans-serif;
+      }
+
+      .house-popup h4 {
+        margin: 0 0 10px 0;
+        color: #333;
+        font-size: 16px;
+      }
+
+      .popup-status {
+        margin: 8px 0;
+        padding: 8px;
+        border-radius: 4px;
+        font-size: 13px;
+        font-weight: bold;
+      }
+
+      .popup-status.subscribed {
+        background-color: #e8f5e8;
+        color: #2e7d32;
+      }
+
+      .popup-status.unsubscribed {
+        background-color: #ffebee;
+        color: #c62828;
+      }
+
+      .popup-status.delivered {
+        background-color: #e3f2fd;
+        color: #1565c0;
+      }
+
+      .popup-status.pending {
+        background-color: #fff3e0;
+        color: #ef6c00;
+      }
+
+      .popup-buttons {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        margin-top: 12px;
+      }
+
+      .popup-button {
+        padding: 8px 12px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: bold;
+        transition: background-color 0.2s;
+      }
+
+      .btn-subscribe {
+        background-color: #4caf50;
+        color: white;
+      }
+
+      .btn-subscribe:hover {
+        background-color: #45a049;
+      }
+
+      .btn-unsubscribe {
+        background-color: #f44336;
+        color: white;
+      }
+
+      .btn-unsubscribe:hover {
+        background-color: #da190b;
+      }
+
+      .btn-delivered {
+        background-color: #2196f3;
+        color: white;
+      }
+
+      .btn-delivered:hover {
+        background-color: #1976d2;
+      }
+
+      .btn-todo {
+        background-color: #ff9800;
+        color: white;
+      }
+
+      .btn-todo:hover {
+        background-color: #f57c00;
+      }
+
+      .legend {
+        position: absolute;
+        bottom: 20px;
+        left: 20px;
+        background: white;
+        padding: 15px;
+        border-radius: 8px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        z-index: 1000;
+        font-size: 13px;
+      }
+
+      .legend h4 {
+        margin: 0 0 10px 0;
+        color: #333;
+      }
+
+      .legend-item {
+        display: flex;
+        align-items: center;
+        margin: 5px 0;
+      }
+
+      .legend-color {
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        margin-right: 8px;
+        border: 2px solid #333;
+      }
+
+      .stats {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        background: white;
+        padding: 15px;
+        border-radius: 8px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        z-index: 1000;
+        min-width: 200px;
+      }
+
+      .stats h4 {
+        margin: 0 0 10px 0;
+        color: #333;
+      }
+
+      .stat-item {
+        display: flex;
+        justify-content: space-between;
+        margin: 5px 0;
+        font-size: 13px;
+      }
+
+      .notification {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: #4caf50;
+        color: white;
+        padding: 12px 18px;
+        border-radius: 6px;
+        z-index: 2000;
+        display: none;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+        font-size: 14px;
+      }
+
+      .notification.error {
+        background: #f44336;
+      }
+
+      .notification.warning {
+        background: #ff9800;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="controls">
+      <h3>📰 Newspaper Delivery Tracker</h3>
+      <div>
+        <input
+          id="cityInput"
+          type="text"
+          value="Bielefeld"
+          placeholder="Enter city name"
+        />
+        <input
+          type="range"
+          name="range"
+          id="range"
+          min="200"
+          step="100"
+          max="10000"
+          value="1000"
+        />
+        <label for="range" id="rangeLabel">1000m</label>
+        <button id="loadBtn">Load Houses</button>
+      </div>
+      <div id="connectionStatus">
+        <span class="status-indicator status-disconnected"></span>
+        Connecting...
+      </div>
+    </div>
+
+    <div class="stats">
+      <h4>📊 Delivery Stats</h4>
+      <div class="stat-item">
+        <span>Total Houses:</span>
+        <span id="totalHouses">0</span>
+      </div>
+      <div class="stat-item">
+        <span>Subscribed:</span>
+        <span id="subscribedCount">0</span>
+      </div>
+      <div class="stat-item">
+        <span>Delivered Today:</span>
+        <span id="deliveredCount">0</span>
+      </div>
+      <div class="stat-item">
+        <span>Pending Delivery:</span>
+        <span id="pendingCount">0</span>
+      </div>
+    </div>
+
+    <div class="legend">
+      <h4>🗺️ Map Legend</h4>
+      <div class="legend-item">
+        <div class="legend-color" style="background-color: #4caf50"></div>
+        <span>Subscribed & Delivered</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-color" style="background-color: #ff9800"></div>
+        <span>Subscribed & Pending</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-color" style="background-color: #f44336"></div>
+        <span>Unsubscribed</span>
+      </div>
+    </div>
+
+    <div id="map"></div>
+
+    <div id="notification" class="notification"></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+
+    <script>
+      let map;
+      let markers = {};
+      let houses = [];
+      let houseStates = {}; // Format: {houseId: {subscribed: bool, delivered: bool}}
+      let currentCity = "";
+      let socket;
+      let isConnected = false;
+      let reconnectAttempts = 0;
+      let maxReconnectAttempts = 10;
+
+      // Initialize WebSocket connection
+      function initSocket() {
+        try {
+          socket = io({
+            transports: ["websocket", "polling"],
+            upgrade: true,
+            rememberUpgrade: true,
+            timeout: 5000,
+            forceNew: false,
+          });
+
+          socket.on("connect", () => {
+            console.log("Connected to sync server");
+            isConnected = true;
+            reconnectAttempts = 0;
+            updateConnectionStatus("connected", "✅ Real-time sync active");
+            showNotification("Connected - Real-time sync enabled", "success");
+
+            // Rejoin current city if we were viewing one
+            if (currentCity) {
+              socket.emit("join_city", { city: currentCity });
+            }
+          });
+
+          socket.on("disconnect", (reason) => {
+            console.log("Disconnected from sync server:", reason);
+            isConnected = false;
+            updateConnectionStatus(
+              "disconnected",
+              "❌ Sync offline - changes saved locally"
+            );
+
+            if (reason === "io server disconnect") {
+              attemptReconnect();
+            }
+          });
+
+          socket.on("connect_error", (error) => {
+            console.log("Connection error:", error);
+            isConnected = false;
+            updateConnectionStatus(
+              "disconnected",
+              "❌ Sync offline - working locally"
+            );
+            attemptReconnect();
+          });
+
+          socket.on("house_state_sync", (data) => {
+            console.log("Received sync update:", data);
+            if (data.city === currentCity.toLowerCase()) {
+              // Update house state from another user
+              if (houseStates[data.house_id]) {
+                houseStates[data.house_id] = {
+                  ...houseStates[data.house_id],
+                  ...data.state,
+                };
+              } else {
+                houseStates[data.house_id] = data.state;
+              }
+
+              saveStates();
+              updateMarkersAndStats();
+
+              // Show notification about sync
+              const action =
+                data.state.subscribed === false
+                  ? "unsubscribed"
+                  : data.state.delivered === true
+                  ? "marked as delivered"
+                  : data.state.delivered === false
+                  ? "marked as pending"
+                  : "updated";
+              showNotification(
+                `🔄 House ${data.house_id} ${action} by another user`,
+                "success"
+              );
+            }
+          });
+
+          socket.on("city_states_sync", (data) => {
+            console.log("Received full city sync:", data);
+            if (data.city === currentCity.toLowerCase()) {
+              // Merge server states with local states
+              Object.keys(data.states).forEach((houseId) => {
+                houseStates[houseId] = {
+                  ...houseStates[houseId],
+                  ...data.states[houseId],
+                };
+              });
+
+              saveStates();
+              updateMarkersAndStats();
+              showNotification("🔄 Synced with other users", "success");
+            }
+          });
+
+          socket.on("reconnecting", (attemptNumber) => {
+            console.log("Reconnecting attempt:", attemptNumber);
+            updateConnectionStatus(
+              "reconnecting",
+              `🔄 Reconnecting... (${attemptNumber})`
+            );
+          });
+
+          socket.on("reconnect", () => {
+            console.log("Successfully reconnected");
+            isConnected = true;
+            updateConnectionStatus("connected", "✅ Reconnected - sync active");
+            showNotification("Reconnected successfully", "success");
+          });
+        } catch (error) {
+          console.log("Socket initialization failed:", error);
+          updateConnectionStatus(
+            "disconnected",
+            "❌ Sync offline - working locally"
+          );
+          isConnected = false;
+        }
+      }
+
+      function attemptReconnect() {
+        if (reconnectAttempts >= maxReconnectAttempts) {
+          updateConnectionStatus(
+            "disconnected",
+            "❌ Sync offline - max attempts reached"
+          );
+          return;
+        }
+
+        reconnectAttempts++;
+        updateConnectionStatus(
+          "reconnecting",
+          `🔄 Reconnecting... (${reconnectAttempts}/${maxReconnectAttempts})`
+        );
+
+        setTimeout(() => {
+          if (!isConnected && socket) {
+            socket.connect();
+          }
+        }, Math.min(1000 * reconnectAttempts, 10000));
+      }
+
+      function syncHouseState(houseId, state) {
+        if (socket && isConnected) {
+          socket.emit("house_state_change", {
+            city: currentCity.toLowerCase(),
+            house_id: houseId,
+            state: state,
+          });
+        }
+      }
+
+      // Load states from localStorage
+      function loadStates() {
+        const saved = localStorage.getItem(`newspaper_states_${currentCity}`);
+        if (saved) {
+          houseStates = JSON.parse(saved);
+        } else {
+          houseStates = {};
+        }
+      }
+
+      // Save states to localStorage and sync
+      function saveStates() {
+        localStorage.setItem(
+          `newspaper_states_${currentCity}`,
+          JSON.stringify(houseStates)
+        );
+      }
+
+      function updateConnectionStatus(status, message) {
+        const statusElement = document.getElementById("connectionStatus");
+        const indicator = statusElement.querySelector(".status-indicator");
+        indicator.className = `status-indicator status-${status}`;
+        statusElement.innerHTML = `<span class="status-indicator status-${status}"></span>${message}`;
+      }
+
+      function showNotification(message, type = "success") {
+        const notification = document.getElementById("notification");
+        notification.textContent = message;
+        notification.className = `notification ${
+          type === "error" ? "error" : type === "warning" ? "warning" : ""
+        }`;
+        notification.style.display = "block";
+
+        setTimeout(() => {
+          notification.style.display = "none";
+        }, 3000);
+      }
+
+      function getHouseColor(houseId) {
+        const state = houseStates[houseId] || {
+          subscribed: true,
+          delivered: false,
+        };
+
+        if (!state.subscribed) {
+          return "#f44336"; // Red - Unsubscribed
+        } else if (state.delivered) {
+          return "#4caf50"; // Green - Delivered
+        } else {
+          return "#ff9800"; // Orange - Pending delivery
+        }
+      }
+
+      function createHousePopup(house) {
+        const state = houseStates[house.id] || {
+          subscribed: true,
+          delivered: false,
+        };
+
+        return `
+          <div class="house-popup">
+            <h4>🏠 ${house.name}</h4>
+
+            <div class="popup-status ${
+              state.subscribed ? "subscribed" : "unsubscribed"
+            }">
+              Subscription: ${
+                state.subscribed ? "✅ Subscribed" : "❌ Unsubscribed"
+              }
+            </div>
+
+            <div class="popup-status ${
+              state.delivered ? "delivered" : "pending"
+            }">
+              Delivery: ${
+                state.delivered ? "📰 Delivered Today" : "⏳ Pending Delivery"
+              }
+            </div>
+
+            <div class="popup-buttons">
+              <button class="popup-button ${
+                state.subscribed ? "btn-unsubscribe" : "btn-subscribe"
+              }"
+                      onclick="toggleSubscription(${house.id})">
+                ${state.subscribed ? "❌ Unsubscribe" : "✅ Subscribe"}
+              </button>
+
+              <button class="popup-button ${
+                state.delivered ? "btn-todo" : "btn-delivered"
+              }"
+                      onclick="toggleDelivery(${house.id})"
+                      ${state.subscribed ? "" : "disabled"}>
+                ${state.delivered ? "⏳ Mark as Todo" : "📰 Mark as Delivered"}
+              </button>
+            </div>
+          </div>
+        `;
+      }
+
+      function createMarker(house) {
+        const marker = L.circleMarker([house.lat, house.lon], {
+          radius: 8,
+          color: "#333",
+          fillColor: getHouseColor(house.id),
+          fillOpacity: 0.8,
+          weight: 2,
+        }).addTo(map);
+
+        marker.bindPopup(createHousePopup(house), {
+          maxWidth: 300,
+          className: "custom-popup",
+        });
+
+        return marker;
+      }
+
+      function toggleSubscription(houseId) {
+        if (!houseStates[houseId]) {
+          houseStates[houseId] = { subscribed: true, delivered: false };
+        }
+
+        houseStates[houseId].subscribed = !houseStates[houseId].subscribed;
+
+        // If unsubscribing, also mark as not delivered
+        if (!houseStates[houseId].subscribed) {
+          houseStates[houseId].delivered = false;
+        }
+
+        saveStates();
+
+        // Sync with other users
+        syncHouseState(houseId, houseStates[houseId]);
+
+        updateMarkersAndStats();
+        showNotification(
+          `House ${houseId} ${
+            houseStates[houseId].subscribed ? "subscribed" : "unsubscribed"
+          }`,
+          houseStates[houseId].subscribed ? "success" : "warning"
+        );
+      }
+
+      function toggleDelivery(houseId) {
+        if (!houseStates[houseId]) {
+          houseStates[houseId] = { subscribed: true, delivered: false };
+        }
+
+        // Only allow delivery changes for subscribed houses
+        if (!houseStates[houseId].subscribed) {
+          showNotification(
+            "Cannot change delivery status for unsubscribed house",
+            "error"
+          );
+          return;
+        }
+
+        houseStates[houseId].delivered = !houseStates[houseId].delivered;
+        saveStates();
+
+        // Sync with other users
+        syncHouseState(houseId, houseStates[houseId]);
+
+        updateMarkersAndStats();
+        showNotification(
+          `House ${houseId} marked as ${
+            houseStates[houseId].delivered ? "delivered" : "pending"
+          }`,
+          "success"
+        );
+      }
+
+      function updateMarkersAndStats() {
+        // Update markers
+        houses.forEach((house) => {
+          if (markers[house.id]) {
+            markers[house.id].setStyle({
+              fillColor: getHouseColor(house.id),
+            });
+
+            // Update popup content
+            markers[house.id].setPopupContent(createHousePopup(house));
+          }
+        });
+
+        // Update statistics
+        updateStats();
+      }
+
+      function updateStats() {
+        const total = houses.length;
+        let subscribed = 0;
+        let delivered = 0;
+        let pending = 0;
+
+        houses.forEach((house) => {
+          const state = houseStates[house.id] || {
+            subscribed: true,
+            delivered: false,
+          };
+          if (state.subscribed) {
+            subscribed++;
+            if (state.delivered) {
+              delivered++;
+            } else {
+              pending++;
+            }
+          }
+        });
+
+        document.getElementById("totalHouses").textContent = total;
+        document.getElementById("subscribedCount").textContent = subscribed;
+        document.getElementById("deliveredCount").textContent = delivered;
+        document.getElementById("pendingCount").textContent = pending;
+      }
+
+      async function geocodeCity(cityName) {
+        const url = "https://nominatim.openstreetmap.org/search";
+        const params = new URLSearchParams({
+          format: "json",
+          q: cityName,
+          limit: "1",
+        });
+
+        const response = await fetch(`${url}?${params}`, {
+          headers: {
+            "User-Agent": "newspaper-delivery-app/1.0",
+          },
+        });
+
+        const data = await response.json();
+        if (data && data.length > 0) {
+          return {
+            lat: parseFloat(data[0].lat),
+            lon: parseFloat(data[0].lon),
+          };
+        }
+        return null;
+      }
+
+      async function loadHouses(city) {
+        try {
+          currentCity = city.toLowerCase();
+          loadStates();
+
+          updateConnectionStatus("connected", "Loading houses...");
+
+          const coords = await geocodeCity(city);
+          if (!coords) {
+            showNotification("City not found", "error");
+            return;
+          }
+
+          // Query Overpass API for buildings
+          const overpassUrl = "https://overpass-api.de/api/interpreter";
+          const range = document.getElementById("range").value;
+          const query = `
+            [out:json];
+            (
+              way["building"](around:${range},${coords.lat},${coords.lon});
+              relation["building"](around:${range},${coords.lat},${coords.lon});
+            );
+            out center;
+          `;
+
+          const response = await fetch(overpassUrl, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/x-www-form-urlencoded",
+              "User-Agent": "newspaper-delivery-app/1.0",
+            },
+            body: `data=${encodeURIComponent(query)}`,
+          });
+
+          const data = await response.json();
+          houses = [];
+
+          data.elements.forEach((element, index) => {
+            if (element.center || (element.lat && element.lon)) {
+              const center = element.center || {
+                lat: element.lat,
+                lon: element.lon,
+              };
+              const tags = element.tags || {};
+
+              let name =
+                tags.name ||
+                `${tags["addr:street"] || "Unknown St"} ${
+                  tags["addr:housenumber"] || ""
+                }`.trim() ||
+                `House ${element.id}`;
+
+              houses.push({
+                id: element.id,
+                name: name,
+                lat: center.lat,
+                lon: center.lon,
+              });
+            }
+          });
+
+          // Initialize map
+          if (!map) {
+            map = L.map("map").setView([coords.lat, coords.lon], 15);
+            L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+              maxZoom: 19,
+              attribution:
+                "© OpenStreetMap contributors | Newspaper Delivery Tracker",
+            }).addTo(map);
+          } else {
+            map.setView([coords.lat, coords.lon], 15);
+            Object.values(markers).forEach((m) => map.removeLayer(m));
+          }
+
+          // Create markers
+          markers = {};
+          houses.forEach((house) => {
+            // Initialize default state if not exists
+            if (!houseStates[house.id]) {
+              houseStates[house.id] = { subscribed: true, delivered: false };
+            }
+            markers[house.id] = createMarker(house);
+          });
+
+          saveStates();
+          updateStats();
+
+          // Join city room for real-time sync
+          if (socket && isConnected) {
+            socket.emit("join_city", { city: currentCity });
+          }
+
+          updateConnectionStatus(
+            "connected",
+            isConnected
+              ? "✅ Houses loaded - sync active"
+              : "⚠️ Houses loaded - sync offline"
+          );
+          showNotification(
+            `Loaded ${houses.length} houses for ${city}`,
+            "success"
+          );
+        } catch (error) {
+          console.error("Load error:", error);
+          updateConnectionStatus("disconnected", "Failed to load houses");
+          showNotification("Failed to load houses", "error");
+        }
+      }
+
+      // Event listeners
+      document.getElementById("range").addEventListener("change", () => {
+        const city = document.getElementById("cityInput").value.trim();
+        if (city) {
+          loadHouses(city);
+        }
+      });
+
+      document.getElementById("range").addEventListener("input", () => {
+        document.getElementById("rangeLabel").innerHTML =
+          document.getElementById("range").value + "m";
+      });
+
+      document.getElementById("loadBtn").addEventListener("click", () => {
+        const city = document.getElementById("cityInput").value.trim();
+        if (city) {
+          loadHouses(city);
+        }
+      });
+
+      document.getElementById("cityInput").addEventListener("keypress", (e) => {
+        if (e.key === "Enter") {
+          const city = document.getElementById("cityInput").value.trim();
+          if (city) {
+            loadHouses(city);
+          }
+        }
+      });
+
+      // Make functions globally available
+      window.toggleSubscription = toggleSubscription;
+      window.toggleDelivery = toggleDelivery;
+
+      // Initialize socket connection
+      initSocket();
+
+      // Initialize
+      updateConnectionStatus("disconnected", "🔄 Initializing sync...");
+
+      // Auto-load initial city
+      const initialCity = document.getElementById("cityInput").value.trim();
+      if (initialCity) {
+        setTimeout(() => loadHouses(initialCity), 1000);
+      }
+    </script>
+  </body>
+</html>
